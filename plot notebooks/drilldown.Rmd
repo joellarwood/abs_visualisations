@@ -1,0 +1,113 @@
+---
+title: "Drilldown plots for hierarchical data"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r load, message=FALSE, warnings = FALSE}
+library(highcharter)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(zoo)
+library(here)
+library(purrr)
+library(knitr)
+```
+
+Drilldown plots can be easily created using `highcharter` which provides an R wrapper around the `highcahrts` javascript library. The structure for the plot is quite simple with the child nested within the parent. [A simple walk through for the wrapper is provided by the the `highcharter` author Joshua Knust](https://jkunst.com/highcharter/articles/drilldown.html). Below I provide an example using the [weekly payroll jobs index](https://www.abs.gov.au/statistics/labour/earnings-and-work-hours/weekly-payroll-jobs-and-wages-australia/latest-release). 
+
+## Setting up the data 
+
+The `readabs` package provides an easy way to download and tidy data from the Australian Bureau of Statistics, including a convenience function for the weekly payroll jobs release. Weekly payroll jobs are are indexed to the week of the 100th confirmed case of COVID-19 in Australia and are detailed at the overall, industry, and subindustry level. These two data sets are shown below (some minor filter has been added to the indsutry data to only give national level data for all people rather than a by state or by sex view)
+
+```{r loadin, message = FALSE, warnings = FALSE}
+industry <- here::here("data", "weekly_payroll_industry.csv") %>% 
+  read_csv(show_col_types = FALSE) %>% 
+  filter(state == "Australia",
+         sex == "Persons",
+         age == "All ages") %>% 
+  select(-series)
+  
+subindustry <- here::here("data", "weekly_payroll_subindustry.csv") %>% 
+  read_csv(show_col_types = FALSE) %>% 
+  select(-series) 
+```
+
+```{r}
+knitr::kables(list(
+  kable(head(filter(industry, industry == "A-Agriculture, forestry & fishing")),
+        caption = "Industry level"),
+  kable(head(filter(subindustry, industry == "A-Agriculture, forestry & fishing")),
+        caption = "subindustry level")
+)
+)
+
+```
+
+Our primary interest is in understanding the change from one point in time to the current point in time. We will set 3 key comparisons points that we can look at for the visualisation:
+  * Change from the 100th COVID-19 Case
+  * Change on same time last year 
+  * Change on the previous month (while the series is currently weekly it is planned to move to a monthly release moving forward so I using change on month and the most immediate comparison)
+  
+However, to begin with we will just visualise the index for the maximum reference period. To be sure that the saame reference period is being used I am first filtering the industry to the max date and then using this maximum date to filter the subindustry data. With the subindustry data we then want to create a nested structure where each child is nested within the parent. 
+```{r}
+
+industry_max <- industry %>% 
+  # Filter to maximum date to get most recent reference period
+  filter(date == max(date)) 
+
+subindustry_drilldown <- subindustry %>% 
+  #Filter to maximum date to get most recent reference period based on the industry dataframe
+  filter(date == max(industry_max$date)) %>% 
+  #date column isn't needed any more
+  select(-date) %>% 
+  ## create nested parent child rows 
+  group_nest(industry) %>% 
+  ## Update teh strcuture so that the toplevel plot and drilldwon speak to eachother
+  mutate(
+    id = industry,
+    type = "column",
+    data = map(data, 
+               mutate, 
+               name = subdivision, 
+               y = value),
+    data = map(data,
+               list_parse)
+  )
+
+
+```
+
+First we can create just the simple bar chart with `highcharter` and the created `industry_max` data 
+
+```{r}
+highcharter::hchart(
+  industry_max,
+  "column",
+  hcaes(x = industry, y = value)
+)
+
+```
+
+Now we can build on this and create a drilldown into subindustry 
+```{r}
+highcharter::hchart(
+  industry_max, #data for top level is coming from industry max
+  "column", #the type of graph is column
+   hcaes( #set the aesthetics
+    x = industry, #industry along the X axis
+    y = value, #value along the y axis
+    name = industry, #not actually sure what this does but it is the doco
+    drilldown = industry #we will drilldown according the the industry children 
+  )
+) %>% 
+   hc_drilldown(
+    allowPointDrilldown = TRUE,
+    series = list_parse(subindustry_drilldown)
+  )
+```
+
+
+

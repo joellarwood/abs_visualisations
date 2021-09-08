@@ -1,0 +1,20 @@
+---
+title: "Drilldown plots for hierarchical data"
+output: html_notebook
+---
+
+```{r load}
+library(highcharter)
+library(tidyverse)
+```
+
+Drilldown plots can be easily created using `highcharter` which provides an R wrapper around the `highcahrts` javascript library. The structure for the plot is quite simple with the child nested within the parent. [A simple walk through for the wrapper is provided by the the `highcharter` author Joshua Knust](https://jkunst.com/highcharter/articles/drilldown.html). Below I provide an example using the [weekly payroll jobs index](https://www.abs.gov.au/statistics/labour/earnings-and-work-hours/weekly-payroll-jobs-and-wages-australia/latest-release). 
+
+## Setting up the data 
+
+The `readabs` package provides an easy way to download and tidy data from the Australian Bureau of Statistics, including a convenience function for the weekly payroll jobs release. Weekly payroll jobs are are indexed to the week of the 100th confirmed case of COVID-19 in Australia and are detailed at the overall, industry, and subindustry level. while a small original timeseries exists our primary interest is in understanding the change from one point in time to the current point in time. We will set 3 key comparsions points that we can look at for the visualisation:
+  * Change from the 100th COVID-19 Case
+  * Change on same time last year 
+  * Change on the previous month (while the series is currently weekly it is planned to move to a monthly relesase moving forward so I using change on monht and the most immediate comparison)
+  
+As the data is already in a wide format 
