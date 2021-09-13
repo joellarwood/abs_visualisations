@@ -9,6 +9,7 @@ output:
 library(highcharter)
 library(readr)
 library(dplyr)
+library(tidyr)
 library(lubridate)
 library(zoo)
 library(here)
@@ -49,7 +50,6 @@ knitr::kables(list(
 Our primary interest is in understanding the change from one point in time to the current point in time. We will set 3 key comparisons points that we can look at for the visualisation: 
 
 1. Change from the 100th COVID-19 Case
-2. Change on same time last year 
 3. Change on the previous month (while the series is currently weekly it is planned to move to a monthly release moving forward so I using change on month and the most immediate comparison)
   
 However, to begin with we will just visualise the index for the maximum reference period. To be sure that the same reference period is being used I am first filtering the industry to the max date and then using this maximum date to filter the subindustry data. With the subindustry data we then want to create a nested structure where each child is nested within the parent and named in a way consistent with the parent data. 
@@ -117,5 +117,109 @@ highcharter::hchart(
   )
 ```
 
+## Adding two indicators
+### Change from 4 weeks ago and change from the 100th case 
+
+Now that we have a simple MVP lets add some more useful information. That is the change from the previous fortnight and change from the 100th case. 
+
+To calculate change on 4 weeks previous we can make use of `dplyr::lag` and set the lag to `4` as the data is weekly. When the publication shifts to monthyl this can be updated to a lag of 1. For the change on the 100th case we know that this is the index value so we can hard code it in at this point. However, when the series  is updated to monthly the index period may change. 
 
 
+```{r}
+industry_change <- industry %>% 
+  group_by(industry) %>% 
+  mutate(
+    month_change = round((value - dplyr::lag(value, 1))/dplyr::lag(value, 1) *100, 2),
+    index_change = round((value - 100) / 100 *100, 2)
+  ) %>% 
+  filter(date == max(industry_max$date)) %>% 
+  pivot_longer(
+    cols = c(month_change, index_change),
+    names_to = "change_from",
+    values_to = "pct_change"
+  )
+
+subindustry_change <- subindustry %>% 
+  group_by(subdivision) %>% 
+  mutate(
+    month_change = round((value - dplyr::lag(value, 1))/dplyr::lag(value, 1) *100, 2),
+    index_change = round((value - 100) / 100 *100, 2)
+  ) %>% 
+  filter(date == max(industry_max$date)) %>% 
+   pivot_longer(
+    cols = c(month_change, index_change),
+    names_to = "change_from",
+    values_to = "pct_change"
+  ) %>% 
+  #date column isn't needed any more
+  select(-date) %>% 
+  # remove initial grouping
+  ungroup() 
+
+subindustry_index_change <- subindustry_change %>% 
+  filter(change_from == "index_change") %>% 
+  ## create nested parent child rows 
+  group_nest(industry) %>% 
+  ## Update teh strcuture so that the toplevel plot and drilldwon speak to eachother
+  mutate(
+    id = industry,
+    type = "column",
+    data = map(data, 
+               mutate, 
+               name = subdivision, 
+               y = pct_change,
+               ),
+    data = map(data,
+               list_parse)
+  )
+
+```
+
+Here we can view the data for the most recent data 
+```{r}
+
+highcharter::hchart(
+  filter(industry_change, change_from == "index_change"),
+  "column",
+   hcaes(
+    x = industry,
+    y = pct_change,
+  )
+) %>% 
+  highcharter::hc_yAxis(title = "% Change") %>% 
+  highcharter::hc_xAxis(title = "Industry")
+
+```
+
+And we can add the drilldown component 
+```{r}
+change_100 <- highcharter::hchart(
+  filter(industry_change, change_from == "index_change"),
+  "column", #the type of graph is column
+   hcaes( #set the aesthetics
+    x = industry, #industry along the X axis
+    y = pct_change, #value along the y axis
+    name = "industry", #not actually sure what this does but it is the doco
+    drilldown = industry #we will drilldown according the the industry children 
+  )
+) %>% 
+  ## Add in the drilldwon data
+   hc_drilldown(
+    allowPointDrilldown = T,
+    series = list_parse(subindustry_index_change)
+  ) %>% 
+  highcharter::hc_yAxis(title = list(text = "% Change")) %>% 
+  highcharter::hc_xAxis(title = list(text = "Industry")) %>% 
+  ##Add a title to the plot
+  highcharter::hc_title(text = "% Change in STP Jobs from 100th COVID-19 Case" ) %>% 
+  ##And a subtitle giving the date
+  highcharter::hc_subtitle(
+    text = paste("Week ending", format.Date(max(industry$date),"%d %B %Y"))
+  )
+
+change_100
+
+htmltools::save_html(change_100, file = here::here("plots", "change_from_100_case.html"))
+```
+
+## NOT SURE HOW TO DO A GROUPED DRILLDOWN ##
