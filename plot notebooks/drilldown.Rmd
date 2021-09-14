@@ -102,7 +102,8 @@ highcharter::hchart(
     y = value, #value along the y axis
     name = industry, #not actually sure what this does but it is the doco
     drilldown = industry #we will drilldown according the the industry children 
-  )
+  ),
+  name = "Industry"
 ) %>% 
   ## Add in the drilldwon data
    hc_drilldown(
@@ -163,7 +164,7 @@ subindustry_index_change <- subindustry_change %>%
   ## Update teh strcuture so that the toplevel plot and drilldwon speak to eachother
   mutate(
     id = industry,
-    type = "column",
+    type = "bar",
     data = map(data, 
                mutate, 
                name = subdivision, 
@@ -193,22 +194,28 @@ highcharter::hchart(
 
 And we can add the drilldown component 
 ```{r}
+
 change_100 <- highcharter::hchart(
   filter(industry_change, change_from == "index_change"),
-  "column", #the type of graph is column
+  "bar", #the type of graph is column
    hcaes( #set the aesthetics
     x = industry, #industry along the X axis
     y = pct_change, #value along the y axis
     name = "industry", #not actually sure what this does but it is the doco
     drilldown = industry #we will drilldown according the the industry children 
-  )
+  ),
+  name = "industry"
 ) %>% 
   ## Add in the drilldwon data
    hc_drilldown(
     allowPointDrilldown = T,
     series = list_parse(subindustry_index_change)
   ) %>% 
-  highcharter::hc_yAxis(title = list(text = "% Change")) %>% 
+  highcharter::hc_yAxis(title = list(text = "% Change"),
+                        labels = list(formatter = JS(
+                        "function(){
+                                         return(this.value + `%`)
+                        }"))) %>% 
   highcharter::hc_xAxis(title = list(text = "Industry")) %>% 
   ##Add a title to the plot
   highcharter::hc_title(text = "% Change in STP Jobs from 100th COVID-19 Case" ) %>% 
@@ -216,7 +223,6 @@ change_100 <- highcharter::hchart(
   highcharter::hc_subtitle(
     text = paste("Week ending", format.Date(max(industry$date),"%d %B %Y"))
   )
-
 change_100
 
 htmltools::save_html(change_100, file = here::here("plots", "change_from_100_case.html"))
