@@ -1,57 +1,53 @@
 ## Job Vaccancies Dashboard
 
+##Load in pacakges
+library(plotly)
 library(shiny)
 library(readabs)
+library(tidyverse)
+library(remotes)
+remotes::install_github("runapp-aus/strayr")
 
-by_state <- readabs::read_abs("6354.0", tables = 1) %>% 
-  mutate(value = value * as.numeric(paste0(1, unit))) %>% 
-  readabs::separate_series(column_names = c("measure", "state")) %>%
-  select(date, series_type, measure, state, value) %>% 
-  pivot_wider(
-    names_from = measure,
-    values_from = value
-  ) %>% 
-  filter(series_type == "Original")
-
-by_industry <- readabs::read_abs("6354.0", tables = 4) %>% 
-  mutate(value = value * as.numeric(paste0(1, unit))) %>% 
-  readabs::separate_series(column_names = c("measure", "industry")) %>%
-  select(date, series_type, measure, industry, value) %>% 
-  pivot_wider(
-    names_from = measure,
-    values_from = value
-  ) %>% 
-  filter(series_type == "Original") %>%
-  left_join(
-    {strayr::anzsic %>% 
-        select(anzsic_division_code, 
-               anzsic_division) %>% 
-        unique()
-    },
-    by = c("industry" = "anzsic_division")) %>% 
-  mutate(industry = forcats::fct_reorder(as.factor(industry),
-                                         `Job Vacancies`)
-  )
 
 ui <- fluidPage(
-  fluidPage(
-    fluidRow(
-      column(
-        width = 12,
-        plotlyOutput("bar")
-      )#,
-      # column(
-      #   width = 4,
-      #   dataTableOutput("datatable")
-      #)
+  fluidRow(
+    column(
+      width = 4,
+      plotlyOutput("bar")
     ),
-    fluidRow(
+    column(
+      width = 8,
       plotlyOutput("line")
     )
   )
 )
 
 server <- function(input, output, session) {
+  
+  ##Load data
+  by_industry <- readabs::read_abs("6354.0", tables = 4) %>%  #Get table 4 from ABS job vacancies
+   # mutate(value = value * as.numeric(paste0(1, unit))) %>% #Make full numbers
+    readabs::separate_series(column_names = c("measure", "industry")) %>% #seperate series for filtering and pivot
+    select(date, series_type, measure, industry, value) %>% #select needed rows
+    pivot_wider( 
+      names_from = measure,
+      values_from = value
+    ) %>% 
+    filter(series_type == "Original") %>% #keep only original series
+    left_join( #join with ANZSIC
+      {strayr::anzsic %>% 
+          select(anzsic_division_code, 
+                 anzsic_division) %>% 
+          unique()
+      },
+      by = c("industry" = "anzsic_division")
+    ) %>% 
+    mutate(
+      code = as.numeric(as.factor(as.factor(anzsic_division_code))), 
+      industry = fct_reorder(industry,
+                             code)
+    )
+  
   
   bardat <- by_industry %>% 
     filter(date == max(date)) %>% 
@@ -60,13 +56,13 @@ server <- function(input, output, session) {
   output$bar <- renderPlotly({
     ggbar <- ggplot(
       data = bardat,
-      aes(x = `Job Vacancies`/1000,
-          y = industry)
+      aes(x = `Job Vacancies`,
+          y = reorder(industry, `Job Vacancies`))
     ) +
       geom_col() +
       labs(x = "Job Vacancies ('000)",
            y = "Industry") +
-      theme_minimal() +
+      theme_classic() +
       ggtitle(
         paste0("Number of Job Vacancies:\n", format(max(bardat$date), "%B %Y"))
       )
@@ -115,15 +111,7 @@ server <- function(input, output, session) {
      ggplotly(ggline, height = 600)
    })
 
-  
-  ##Rendser a dataframe of the selected data
-  output$datatable <- renderDataTable({
-    selected_industry() %>% 
-       select(date, industry, `Job Vacancies`, `Standard Error of Job Vacancies`) #%>% 
-      # DT::datatable(
-      #   options = list(scrollY = '450px')
-      # )
-  })
+
   
   
 }
