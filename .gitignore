@@ -43,3 +43,6 @@ docs/
 
 # translation temp files
 po/*~
+
+# RSconnect
+shiny_apps/rsconnect/

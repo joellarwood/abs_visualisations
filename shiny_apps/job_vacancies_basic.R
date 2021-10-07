@@ -36,11 +36,11 @@ by_industry <- readabs::read_abs("6354.0", tables = 4) %>%  #Get table 4 from AB
 ui <- fluidPage(
   fluidRow(
     column(
-      width = 4,
+      width = 6,
       plotlyOutput("bar")
     ),
     column(
-      width = 8,
+      width = 6,
       plotlyOutput("line")
     )
   )
@@ -57,18 +57,19 @@ server <- function(input, output, session) {
     ggbar <- ggplot(
       data = bardat,
       aes(x = `Job Vacancies`,
-          y = reorder(industry, `Job Vacancies`))
+          y = reorder(industry, `Job Vacancies`),
+          text = paste(`Job Vacancies`*1000, " ", industry, "Job Vacancies"))
     ) +
       geom_col() +
       labs(x = "Job Vacancies ('000)",
            y = "Industry") +
       theme_classic() +
       ggtitle(
-        paste0("Number of Job Vacancies:\n", format(max(bardat$date), "%B %Y"))
+        paste0("Number of Job Vacancies:\nQuarter Ending ", format(max(bardat$date), "%B %Y"))
       )
     
     
-    ggplotly(ggbar, height = 600)
+    ggplotly(ggbar, height = 600, tooltip = "text") %>% config(displayModeBar = F)
     })
     
   
@@ -87,7 +88,9 @@ server <- function(input, output, session) {
    
    ##updatre data for time series plot 
    selected_industry <- reactive({
-     by_industry[by_industry$industry %in% clicked(), ]
+     by_industry %>% 
+       filter(industry %in% clicked(),
+              date >= max(date) - lubridate::years(10))
    })
   
    ##Render line plot
@@ -101,8 +104,10 @@ server <- function(input, output, session) {
      ) + 
        geom_line() +
        geom_point() +
-       scale_x_date(breaks = seq.Date(from = min(by_industry$date), to = max(by_industry$date), by = "12 months"),
-                    date_labels = "%B %Y") +
+       labs(y = "Job Vacancies ('000)",
+            x = "Quarter Ending") +
+       scale_x_date(breaks = seq.Date(from = min(selected_industry()$date), to = max(selected_industry()$date), by = "12 months"),
+                    date_labels = "%b\n%Y") +
        theme_classic() +
        ggtitle(
          paste0("Number of Job Vacancies:\n", clicked())
