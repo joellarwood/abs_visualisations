@@ -6,8 +6,32 @@ library(shiny)
 library(readabs)
 library(tidyverse)
 library(remotes)
-remotes::install_github("runapp-aus/strayr")
+library(strayr)
 
+anzsic <- strayr::anzsic2006 %>% 
+  select(anzsic_division_code, 
+         anzsic_division_title) %>% 
+  unique()
+
+##Load data
+by_industry <- readabs::read_abs("6354.0", tables = 4) %>%  #Get table 4 from ABS job vacancies
+  # mutate(value = value * as.numeric(paste0(1, unit))) %>% #Make full numbers
+  readabs::separate_series(column_names = c("measure", "industry")) %>% #seperate series for filtering and pivot
+  select(date, series_type, measure, industry, value) %>% #select needed rows
+  pivot_wider( 
+    names_from = measure,
+    values_from = value
+  ) %>% 
+  filter(series_type == "Original") %>% #keep only original series
+  left_join( #join with ANZSIC
+    anzsic,
+    by = c("industry" = "anzsic_division_title")
+  ) %>% 
+  mutate(
+    code = as.numeric(as.factor(as.factor(anzsic_division_code))), 
+    industry = fct_reorder(industry,
+                           code)
+  )
 
 ui <- fluidPage(
   fluidRow(
@@ -23,30 +47,6 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
-  
-  ##Load data
-  by_industry <- readabs::read_abs("6354.0", tables = 4) %>%  #Get table 4 from ABS job vacancies
-   # mutate(value = value * as.numeric(paste0(1, unit))) %>% #Make full numbers
-    readabs::separate_series(column_names = c("measure", "industry")) %>% #seperate series for filtering and pivot
-    select(date, series_type, measure, industry, value) %>% #select needed rows
-    pivot_wider( 
-      names_from = measure,
-      values_from = value
-    ) %>% 
-    filter(series_type == "Original") %>% #keep only original series
-    left_join( #join with ANZSIC
-      {strayr::anzsic %>% 
-          select(anzsic_division_code, 
-                 anzsic_division) %>% 
-          unique()
-      },
-      by = c("industry" = "anzsic_division")
-    ) %>% 
-    mutate(
-      code = as.numeric(as.factor(as.factor(anzsic_division_code))), 
-      industry = fct_reorder(industry,
-                             code)
-    )
   
   
   bardat <- by_industry %>% 
@@ -102,7 +102,7 @@ server <- function(input, output, session) {
        geom_line() +
        geom_point() +
        scale_x_date(breaks = seq.Date(from = min(by_industry$date), to = max(by_industry$date), by = "12 months"),
-                    date_labels = "%b %y") +
+                    date_labels = "%B %Y") +
        theme_classic() +
        ggtitle(
          paste0("Number of Job Vacancies:\n", clicked())
