@@ -31,7 +31,7 @@ industry_change <- industry %>%
   group_by(industry) %>%
   mutate(
     four_week_date = dplyr::lag(date, 4),
-    four_week_change = round((value - dplyr::lag(value, 4)) / dplyr::lag(value, 1) * 100, 2),
+    four_week_change = round((value - dplyr::lag(value, 4)) / dplyr::lag(value, 4) * 100, 2),
     covid_change = round((value - 100) / 100 * 100, 2)
   ) %>%
   filter(date == max_date) %>% 
@@ -46,7 +46,7 @@ subindustry_change <- subindustry %>%
   group_by(industry_subdivision) %>%
   mutate(
     four_week_date = dplyr::lag(date, 4),
-    four_week_change = round((value - dplyr::lag(value, 4)) / dplyr::lag(value, 1) * 100, 2),
+    four_week_change = round((value - dplyr::lag(value, 4)) / dplyr::lag(value, 4) * 100, 2),
     covid_change = round((value - 100) / 100 * 100, 2)
   ) %>%
   filter(date == max_date) %>% 
